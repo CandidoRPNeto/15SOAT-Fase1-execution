@@ -1,0 +1,45 @@
+asyncapi: 3.0.0
+info:
+  title: Execution Service — saga replies and shop-floor events
+  version: 1.0.0
+  description: |
+    Messages the Execution Service publishes. Envelope and routing rules:
+    15SOAT-Fase1 docs/asyncapi.yaml (ADR-011). saga_id/correlation_id are
+    echoed from the command that queued the task.
+defaultContentType: application/json
+channels:
+  workshop:
+    address: workshop
+    messages:
+      diagnosisEnqueued:
+        name: evt.execution.diagnosis_enqueued
+        summary: Reply to cmd.execution.enqueue_diagnosis. Payload {service_order_id, task_id}.
+      diagnosisEnqueueFailed:
+        name: evt.execution.diagnosis_enqueue_failed
+        summary: Queue at capacity (EXECUTION_QUEUE_CAPACITY). Payload {service_order_id, reason}.
+      diagnosisStarted:
+        name: evt.execution.diagnosis_started
+        summary: Mechanic started the diagnosis. Payload {service_order_id, mechanic_id}.
+      diagnosisCompleted:
+        name: evt.execution.diagnosis_completed
+        summary: Mechanic finished the diagnosis; the OS saga then asks Billing for a budget. Payload {service_order_id, mechanic_id, notes?}.
+      repairEnqueued:
+        name: evt.execution.repair_enqueued
+        summary: Reply to cmd.execution.enqueue_repair. Payload {service_order_id, task_id}.
+      repairEnqueueFailed:
+        name: evt.execution.repair_enqueue_failed
+        summary: Queue at capacity; the saga releases stock and voids the budget. Payload {service_order_id, reason}.
+      repairStarted:
+        name: evt.execution.repair_started
+        summary: Saga pivot — no compensation after this point. Payload {service_order_id, mechanic_id}.
+      repairFinished:
+        name: evt.execution.repair_finished
+        summary: Repair done; the saga finalizes the order and requests payment. Payload {service_order_id, mechanic_id, notes?}.
+operations:
+  publishExecutionEvents:
+    action: send
+    channel: { $ref: '#/channels/workshop' }
+  consumeExecutionCommands:
+    action: receive
+    channel: { $ref: '#/channels/workshop' }
+    description: Binds execution.inbox to cmd.execution.* (enqueue_diagnosis, enqueue_repair, cancel_task).

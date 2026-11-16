@@ -1,0 +1,247 @@
+{
+    "openapi": "3.0.0",
+    "info": {
+        "title": "Execution Service — Workshop OS",
+        "description": "Fila de execução da oficina: diagnóstico e reparo (MongoDB). Fase 4: chamado via Traefik, que autentica no OS Service (ForwardAuth) e repassa X-User-Id/X-User-Role/X-User-Client-Id.",
+        "version": "1.0.0"
+    },
+    "servers": [
+        {
+            "url": "http://localhost:8000",
+            "description": "Gateway (Traefik)"
+        }
+    ],
+    "paths": {
+        "/api/v1/executions": {
+            "get": {
+                "tags": [
+                    "Executions"
+                ],
+                "summary": "Fila de execução ativa, por prioridade (reparos antes de diagnósticos) e antiguidade",
+                "operationId": "7f23b0c341f897cad9308a25f0c0c178",
+                "responses": {
+                    "200": {
+                        "description": "Tarefas queued/in_progress"
+                    }
+                },
+                "security": [
+                    {
+                        "gateway": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/executions/{serviceOrderId}": {
+            "get": {
+                "tags": [
+                    "Executions"
+                ],
+                "summary": "Tarefa e timeline da OS",
+                "operationId": "41562278f091394a2fa91ac21f003378",
+                "parameters": [
+                    {
+                        "name": "serviceOrderId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Tarefa"
+                    },
+                    "404": {
+                        "description": "OS sem tarefa"
+                    }
+                },
+                "security": [
+                    {
+                        "gateway": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/executions/{serviceOrderId}/diagnosis/start": {
+            "post": {
+                "tags": [
+                    "Executions"
+                ],
+                "summary": "Mecânico inicia o diagnóstico (OS → in_diagnosis)",
+                "operationId": "f97ad01e6a30fea8a5791903e4f05df5",
+                "parameters": [
+                    {
+                        "name": "serviceOrderId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Em diagnóstico"
+                    },
+                    "422": {
+                        "description": "Fase/status inválido"
+                    }
+                },
+                "security": [
+                    {
+                        "gateway": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/executions/{serviceOrderId}/diagnosis/finish": {
+            "post": {
+                "tags": [
+                    "Executions"
+                ],
+                "summary": "Mecânico conclui o diagnóstico (a saga pede o orçamento ao Billing)",
+                "operationId": "4a19dca16920d6ac64f988644c434982",
+                "parameters": [
+                    {
+                        "name": "serviceOrderId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "notes": {
+                                        "type": "string",
+                                        "example": "Pastilhas gastas"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Diagnóstico concluído"
+                    },
+                    "422": {
+                        "description": "Fase/status inválido"
+                    }
+                },
+                "security": [
+                    {
+                        "gateway": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/executions/{serviceOrderId}/repair/start": {
+            "post": {
+                "tags": [
+                    "Executions"
+                ],
+                "summary": "Mecânico inicia o reparo (pivot da saga; OS → in_execution)",
+                "operationId": "013eb875034bd9e034b1428dbee85f65",
+                "parameters": [
+                    {
+                        "name": "serviceOrderId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "Em reparo"
+                    },
+                    "422": {
+                        "description": "Fase/status inválido"
+                    }
+                },
+                "security": [
+                    {
+                        "gateway": []
+                    }
+                ]
+            }
+        },
+        "/api/v1/executions/{serviceOrderId}/repair/finish": {
+            "post": {
+                "tags": [
+                    "Executions"
+                ],
+                "summary": "Mecânico finaliza o reparo (OS → finalized; Billing abre o pagamento)",
+                "operationId": "2d1af17fed89f2fd31015249fe9ea1b7",
+                "parameters": [
+                    {
+                        "name": "serviceOrderId",
+                        "in": "path",
+                        "required": true,
+                        "schema": {
+                            "type": "integer"
+                        }
+                    }
+                ],
+                "requestBody": {
+                    "required": false,
+                    "content": {
+                        "application/json": {
+                            "schema": {
+                                "properties": {
+                                    "notes": {
+                                        "type": "string"
+                                    }
+                                },
+                                "type": "object"
+                            }
+                        }
+                    }
+                },
+                "responses": {
+                    "200": {
+                        "description": "Reparo finalizado"
+                    },
+                    "422": {
+                        "description": "Fase/status inválido"
+                    }
+                },
+                "security": [
+                    {
+                        "gateway": []
+                    }
+                ]
+            }
+        }
+    },
+    "components": {
+        "securitySchemes": {
+            "gateway": {
+                "type": "http",
+                "description": "Token do OS Service (Sanctum ou JWT do Lambda), validado pelo gateway",
+                "scheme": "bearer"
+            },
+            "sanctum": {
+                "type": "http",
+                "scheme": "bearer",
+                "bearerFormat": "Token",
+                "description": "Informe o token Sanctum: Bearer {token}"
+            }
+        }
+    },
+    "tags": [
+        {
+            "name": "Executions",
+            "description": "Fila de execução: diagnóstico e reparo"
+        }
+    ]
+}
