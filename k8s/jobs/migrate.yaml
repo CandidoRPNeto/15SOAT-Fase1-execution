@@ -1,0 +1,36 @@
+# Rendered by scripts/deploy-kind.sh (IMAGE placeholder); re-created per deploy.
+# initContainer: idempotent rs.initiate of the single-node replica set, using the
+# same host name the app's MONGODB_URI points at.
+apiVersion: batch/v1
+kind: Job
+metadata:
+  name: execution-migrate
+  namespace: execution
+spec:
+  backoffLimit: 3
+  ttlSecondsAfterFinished: 600
+  template:
+    spec:
+      restartPolicy: Never
+      initContainers:
+        - name: replica-set
+          image: mongo:7
+          imagePullPolicy: IfNotPresent
+          command:
+            - mongosh
+            - --quiet
+            - --host
+            - execution-mongo-0.execution-mongo.execution.svc.cluster.local
+            - --eval
+            - >-
+              try { rs.status().ok } catch (e) {
+              rs.initiate({_id: "rs0", members: [{_id: 0, host: "execution-mongo-0.execution-mongo.execution.svc.cluster.local:27017"}]}).ok }
+      containers:
+        - name: migrate
+          image: IMAGE
+          imagePullPolicy: IfNotPresent
+          # Waits for the replica set to elect a primary before creating indexes.
+          command: ["sh", "-c", "for i in $(seq 1 30); do php artisan migrate --force && exit 0; sleep 2; done; exit 1"]
+          envFrom:
+            - configMapRef: { name: execution-config }
+            - secretRef: { name: execution-secret }

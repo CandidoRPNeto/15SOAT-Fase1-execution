@@ -1,0 +1,38 @@
+# Execution Service (Fase 4, namespace `execution`). Secret `execution-secret`
+# (APP_KEY, RABBITMQ_*) vem de 15SOAT-Fase1-kubernetes/scripts/bootstrap-secrets.sh.
+apiVersion: v1
+kind: ConfigMap
+metadata:
+  name: execution-config
+data:
+  APP_NAME: "Execution Service"
+  APP_ENV: "production"
+  APP_DEBUG: "false"
+  APP_URL: "http://localhost:30080/execution"
+  APP_LOCALE: "pt_BR"
+  LOG_CHANNEL: "json"
+  LOG_LEVEL: "info"
+  DB_CONNECTION: "mongodb"
+  # Replica set de 1 nó (transações do inbox/outbox, ADR-012). O host precisa
+  # ser o mesmo registrado no rs.initiate (jobs/migrate.yaml).
+  MONGODB_URI: "mongodb://execution-mongo-0.execution-mongo.execution.svc.cluster.local:27017/?replicaSet=rs0"
+  MONGODB_DATABASE: "execution"
+  CACHE_STORE: "file"
+  SESSION_DRIVER: "array"
+  QUEUE_CONNECTION: "sync"
+  RABBITMQ_HOST: "rabbitmq.platform.svc.cluster.local"
+  RABBITMQ_PORT: "5672"
+  RABBITMQ_QUEUE: "execution.inbox"
+  # 0 recusa todo trabalho novo → a saga compensa (cenário de falha do vídeo).
+  EXECUTION_QUEUE_CAPACITY: "50"
+  L5_SWAGGER_GENERATE_ALWAYS: "false"
+  L5_SWAGGER_CONST_HOST: "http://localhost:30080"
+  DD_SERVICE: "execution-service"
+  DD_ENV: "dev"
+  DD_VERSION: "4.0.0"
+  DD_TRACE_ENABLED: "true"
+  DD_TRACE_CLI_ENABLED: "false"
+  DD_LOGS_INJECTION: "true"
+  DD_AGENT_HOST: "172.22.0.1"
+  DD_TRACE_AGENT_PORT: "8126"
+  DD_TRACE_AGENT_URL: "http://172.22.0.1:8126"

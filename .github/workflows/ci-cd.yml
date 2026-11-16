@@ -1,0 +1,147 @@
+name: CI/CD
+
+# Pipeline independente deste microsserviço (Fase 4):
+# test (unit + feature + BDD, cobertura >= 80%) → quality (Pint + SonarCloud)
+# → build (imagem no GHCR) → deploy (runner self-hosted → kind, ADR-014).
+on:
+  push:
+    branches: [main, homolog]
+  pull_request:
+    branches: [main, homolog]
+
+permissions:
+  contents: read
+
+env:
+  IMAGE: ghcr.io/candidorpneto/15soat-fase1-execution
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    services:
+      # Broker real para os testes de integração dos adapters RabbitMQ.
+      rabbitmq:
+        image: rabbitmq:3.13
+        ports: ["5672:5672"]
+        options: >-
+          --health-cmd "rabbitmq-diagnostics -q ping" --health-interval 10s --health-timeout 10s --health-retries 10
+    env:
+      RABBITMQ_TEST_HOST: 127.0.0.1
+      MONGODB_URI: mongodb://127.0.0.1:27017/?replicaSet=rs0&directConnection=true
+    steps:
+      - uses: actions/checkout@v4
+      # MongoDB precisa ser replica set (transações) — service container não aceita args.
+      - name: Start MongoDB replica set
+        run: |
+          docker run -d --name mongo -p 27017:27017 mongo:7 --replSet rs0 --bind_ip_all
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval "db.adminCommand('ping').ok" && break; sleep 2; done
+          docker exec mongo mongosh --quiet --eval "rs.initiate({_id:'rs0',members:[{_id:0,host:'127.0.0.1:27017'}]})"
+          for i in $(seq 1 30); do docker exec mongo mongosh --quiet --eval "db.hello().isWritablePrimary" | grep -q true && break; sleep 2; done
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mongodb, mbstring, xml, bcmath, zip, sockets
+          coverage: pcov
+          tools: composer
+
+      - name: Install dependencies
+        run: composer install --no-interaction --prefer-dist --no-progress
+
+      - name: Prepare environment
+        run: cp .env.example .env && php artisan key:generate
+
+      - name: Tests with coverage gate (>= 80%)
+        run: php artisan test --coverage --min=80 --coverage-clover=coverage.xml --log-junit=test-results.xml
+
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: coverage
+          path: |
+            coverage.xml
+            test-results.xml
+          retention-days: 14
+
+  quality:
+    needs: test
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+
+      - uses: shivammathur/setup-php@v2
+        with:
+          php-version: "8.4"
+          extensions: mongodb, mbstring, xml, bcmath, zip, sockets
+          tools: composer
+
+      - name: Code style (Pint)
+        run: composer install --no-interaction --prefer-dist --no-progress && ./vendor/bin/pint --test
+
+      - uses: actions/download-artifact@v4
+        with:
+          name: coverage
+
+      - name: Check SonarCloud token
+        id: sonar
+        run: echo "enabled=${{ secrets.SONAR_TOKEN != '' }}" >> "$GITHUB_OUTPUT"
+
+      # Quality gate do SonarCloud (cobertura, bugs, code smells, duplicação).
+      # Sem o secret SONAR_TOKEN o passo é pulado com aviso — Pint ainda roda.
+      - name: SonarCloud scan + quality gate
+        if: steps.sonar.outputs.enabled == 'true'
+        uses: SonarSource/sonarqube-scan-action@v5
+        env:
+          SONAR_TOKEN: ${{ secrets.SONAR_TOKEN }}
+          SONAR_HOST_URL: https://sonarcloud.io
+        with:
+          args: -Dsonar.qualitygate.wait=true
+
+      - name: SonarCloud not configured
+        if: steps.sonar.outputs.enabled != 'true'
+        run: echo "::warning::SONAR_TOKEN not set — SonarCloud quality gate skipped (see README)."
+
+  build:
+    needs: [test, quality]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        if: github.event_name == 'push'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+      - uses: docker/build-push-action@v6
+        with:
+          context: .
+          push: ${{ github.event_name == 'push' }}
+          tags: |
+            ${{ env.IMAGE }}:${{ github.sha }}
+            ${{ env.IMAGE }}:latest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+  # Só em push na branch protegida (nunca em PR, nem de fork): o runner
+  # self-hosted fica nesta máquina e tem acesso ao cluster kind (ADR-014).
+  deploy:
+    needs: build
+    if: github.event_name == 'push' && github.ref == 'refs/heads/main'
+    runs-on: [self-hosted, kind]
+    permissions:
+      contents: read
+      packages: read
+    concurrency:
+      group: deploy-kind-15soat-fase1-execution
+      cancel-in-progress: false
+    steps:
+      - uses: actions/checkout@v4
+      - name: Log in to GHCR
+        run: echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin
+      - name: Deploy to kind (rollout + migrate + smoke test)
+        run: scripts/deploy-kind.sh "${IMAGE}:${{ github.sha }}"

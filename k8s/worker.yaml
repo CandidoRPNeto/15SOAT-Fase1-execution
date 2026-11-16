@@ -1,0 +1,31 @@
+# bus-worker: relay do outbox (MongoDB) + consumo de cmd.execution.*.
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: execution-worker
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: execution-worker
+  template:
+    metadata:
+      labels:
+        app: execution-worker
+        tags.datadoghq.com/service: execution-service
+    spec:
+      containers:
+        - name: bus-worker
+          image: execution-service
+          imagePullPolicy: IfNotPresent
+          command: ["sh", "-c", "php artisan config:cache && exec php artisan bus:work --poll=1"]
+          envFrom:
+            - configMapRef: { name: execution-config }
+            - secretRef: { name: execution-secret }
+          env:
+            - { name: DD_TRACE_CLI_ENABLED, value: "true" }
+            - { name: DD_TRACE_GENERATE_ROOT_SPAN, value: "false" }
+            - { name: DD_TRACE_AUTO_FLUSH_ENABLED, value: "true" }
+          resources:
+            requests: { cpu: "50m", memory: "128Mi" }
+            limits: { cpu: "300m", memory: "256Mi" }
