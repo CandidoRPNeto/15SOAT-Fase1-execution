@@ -1,5 +1,7 @@
 # 15SOAT-Fase1-execution — Execution Service
 
+[![CI/CD](https://github.com/CandidoRPNeto/15SOAT-Fase1-execution/actions/workflows/ci-cd.yml/badge.svg?branch=main)](https://github.com/CandidoRPNeto/15SOAT-Fase1-execution/actions/workflows/ci-cd.yml)
+
 Microsserviço de **execução e produção** da Workshop OS (Fase 4 — SOAT/FIAP).
 
 - Gerencia a fila de execução da OS (diagnóstico e reparo), com prioridade: reparos aprovados vêm antes de novos diagnósticos.
@@ -71,4 +73,11 @@ Manifests: `k8s/` (namespace `execution`):
 
 ## Cobertura
 
-Local, sem broker: ~81%. No CI, com RabbitMQ real, os adapters também são cobertos. Relatório: artefato `coverage` do workflow e SonarCloud.
+Medida no CI: job `test`, PHPUnit + pcov, RabbitMQ real, gate `--min=80`.
+
+| Execução | Testes | Cobertura |
+|---|---|---|
+| [CI/CD run 44128027026 (main)](https://github.com/CandidoRPNeto/15SOAT-Fase1-execution/actions/runs/44128027026) | 33 (99 assertions) | **99,0%** |
+
+- Relatório Clover: artefato `coverage` da execução.
+- Local, sem broker, os adapters RabbitMQ ficam de fora: ~81%.
