@@ -31,7 +31,7 @@ Contrato das mensagens: [`docs/asyncapi.yaml`](docs/asyncapi.yaml).
 
 ## Tecnologias
 
-Laravel 13 · PHP 8.4 · MongoDB 7 (`mongodb/laravel-mongodb`, replica set) · RabbitMQ · L5-Swagger · Datadog APM · Docker · Kubernetes (kind) · GitHub Actions · SonarCloud.
+Laravel 13 · PHP 8.4 · MongoDB 7 (`mongodb/laravel-mongodb`, replica set) · RabbitMQ · L5-Swagger · dd-trace → Jaeger (APM local, [ADR-016](https://github.com/CandidoRPNeto/15SOAT-Fase1/blob/master/docs/architecture/adrs/adr-016-local-apm-jaeger.md)) · Docker · Kubernetes (kind) · GitHub Actions · SonarCloud.
 
 ## Executar
 
